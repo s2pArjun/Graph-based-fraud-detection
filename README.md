@@ -1,7 +1,11 @@
 # 🛡️ Ethereum Fraud Detection System
 
 An advanced fraud detection platform that combines traditional graph analysis with Graph Convolutional Networks (GCN) to identify suspicious patterns in Ethereum blockchain transactions.
-
+![Project Banner](https://img.shields.io/badge/Ethereum-Fraud%20Detection-blue)
+![React](https://img.shields.io/badge/React-18.x-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)
+![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ## 🎯 **Overview**
 
