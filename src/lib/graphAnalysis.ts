@@ -409,9 +409,14 @@ export class FraudDetectionAnalyzer {
             });
         });
 
-        // NEW: Calculate DYNAMIC threshold based on average risk
+        // NEW: Calculate DYNAMIC threshold using standard deviation 
         const avgRisk = nodes.reduce((sum, n) => sum + n.risk, 0) / nodes.length;
-        const riskThreshold = avgRisk; // Use average as threshold
+         // Calculate standard deviation for better threshold
+        const variance = nodes.reduce((sum, n) => sum + Math.pow(n.risk - avgRisk, 2), 0) / nodes.length;
+        const stdDev = Math.sqrt(variance);
+        
+        // Threshold = average + 1.5 standard deviations, capped at 0.7
+        const riskThreshold = Math.min(avgRisk + (1.5 * stdDev), 0.7);
 
         console.log(`📊 Dynamic Risk Threshold: ${(riskThreshold * 100).toFixed(2)}%`);
 
@@ -502,4 +507,4 @@ export function analyzeFraudData(transactions: Transaction[]) {
     const analyzer = new FraudDetectionAnalyzer(transactions);
     return analyzer.analyze();
 }
-
+
