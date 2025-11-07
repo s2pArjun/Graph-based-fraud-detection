@@ -67,6 +67,26 @@ export const useD3ForceGraph = ({
     const graphNodes = nodes.map(d => ({ ...d }));
     const graphEdges = edges.map(d => ({ ...d }));
 
+    // ✅ FIX: Normalize edge values to prevent thick lines
+    const allValues = graphEdges.map(e => e.value).filter(v => v > 0);
+    const maxValue = Math.max(...allValues, 1); // Prevent division by zero
+    const minValue = Math.min(...allValues);
+
+    // Normalize to 0-10 range (like real ETH amounts)
+    const normalizeValue = (value: number): number => {
+      if (maxValue === minValue || maxValue === 0) return 1;
+      return ((value - minValue) / (maxValue - minValue)) * 10;
+    };
+
+    console.log('Edge value stats:', {
+      min: minValue,
+      max: maxValue,
+      sample: graphEdges.slice(0, 3).map(e => ({
+        original: e.value,
+        normalized: normalizeValue(e.value)
+      }))
+    });
+
     // Create force simulation based on layout
     let simulation: d3.Simulation<Node, Edge>;
 
@@ -141,26 +161,44 @@ export const useD3ForceGraph = ({
       return 5 + pagerank * 500; // Scale PageRank to visible size
     };
 
-    // Helper: Get edge color based on timestamp
-    const getEdgeColor = (timestamp: string) => {
-      if (!timestamp) return 'rgba(100, 116, 139, 0.3)';
+    // Helper: Get edge color based on timestamp (FIXED VERSION)
+    const getEdgeColor = (timestamp: string, value: number) => {
+      // Try to use timestamp if valid
+      if (timestamp && timestamp.trim() !== '') {
+        const txDate = new Date(timestamp);
+        
+        // Check if date is valid
+        if (!isNaN(txDate.getTime())) {
+          const now = new Date();
+          const hoursDiff = (now.getTime() - txDate.getTime()) / (1000 * 60 * 60);
+          
+          // Check if time difference is valid (not negative, not NaN)
+          if (hoursDiff >= 0 && isFinite(hoursDiff)) {
+            if (hoursDiff < 24) return 'rgba(59, 130, 246, 0.6)'; // Bright blue (recent)
+            if (hoursDiff < 168) return 'rgba(59, 130, 246, 0.4)'; // Medium blue (1 week)
+            return 'rgba(100, 116, 139, 0.3)'; // Faded gray (old)
+          }
+        }
+      }
       
-      const txDate = new Date(timestamp);
-      const now = new Date();
-      const hoursDiff = (now.getTime() - txDate.getTime()) / (1000 * 60 * 60);
-      
-      if (hoursDiff < 24) return 'rgba(59, 130, 246, 0.6)'; // Bright blue (recent)
-      if (hoursDiff < 168) return 'rgba(59, 130, 246, 0.4)'; // Medium blue
-      return 'rgba(100, 116, 139, 0.2)'; // Faded gray (old)
+      // Fallback: Color by transaction value (for CSV data with bad timestamps)
+      const normalized = normalizeValue(value);
+      if (normalized > 5) return 'rgba(139, 92, 246, 0.5)'; // Purple (large tx)
+      if (normalized > 1) return 'rgba(59, 130, 246, 0.5)'; // Blue (medium tx)
+      return 'rgba(34, 197, 94, 0.4)'; // Green (small tx)
     };
 
-    // Draw edges
+    // ✅ FIXED: Draw edges with normalized width (NO MORE THICK GREY LINES!)
     const link = container.append('g')
       .selectAll('line')
       .data(graphEdges)
       .join('line')
-      .attr('stroke', d => getEdgeColor(d.timestamp))
-      .attr('stroke-width', d => Math.sqrt(d.value) * 0.5 + 1)
+      .attr('stroke', d => getEdgeColor(d.timestamp, d.value))
+      .attr('stroke-width', d => {
+        const normalized = normalizeValue(d.value);
+        // Cap between 0.5px (minimum visible) and 3px (maximum)
+        return Math.max(0.5, Math.min(3, normalized * 0.3 + 0.5));
+      })
       .attr('stroke-opacity', 0.6);
 
     // Draw nodes
