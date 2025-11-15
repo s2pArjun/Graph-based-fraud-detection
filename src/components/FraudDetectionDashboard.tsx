@@ -5,10 +5,11 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Database, Network, AlertTriangle, TrendingUp, Activity, Shield, FileDown } from "lucide-react";
+import { Upload, Database, Network, AlertTriangle, TrendingUp, Activity, Shield, FileDown, Search } from "lucide-react";
 import DataUpload from "./DataUpload";
 import GraphVisualization from "./GraphVisualization";
 import FraudResults from "./FraudResults";
+import AddressLookupPanel from "./AddressLookupPanel";
 import { analyzeFraudData } from "@/lib/graphAnalysis";
 
 interface ProcessingStatus {
@@ -221,7 +222,7 @@ const FraudDetectionDashboard: React.FC = () => {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-          <TabsList className="grid w-full grid-cols-4 bg-secondary/50 h-auto">
+          <TabsList className="grid w-full grid-cols-5 bg-secondary/50 h-auto">
             <TabsTrigger value="upload" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
               <Upload className="h-3 w-3 md:h-4 md:w-4" />
               <span className="hidden sm:inline">Data Upload</span>
@@ -241,6 +242,11 @@ const FraudDetectionDashboard: React.FC = () => {
               <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
               <span className="hidden sm:inline">Fraud Results</span>
               <span className="sm:hidden">Results</span>
+            </TabsTrigger>
+            <TabsTrigger value="lookup" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
+              <Search className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Address Lookup</span>
+              <span className="sm:hidden">Lookup</span>
             </TabsTrigger>
           </TabsList>
 
@@ -293,6 +299,10 @@ const FraudDetectionDashboard: React.FC = () => {
                 gcnGraphWithNeighbors={gcnGraphWithNeighbors}
               />
             )}
+          </TabsContent>
+
+          <TabsContent value="lookup" className="space-y-6">
+            <AddressLookupPanel />
           </TabsContent>
         </Tabs>
       </div>

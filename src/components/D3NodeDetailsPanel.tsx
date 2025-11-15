@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { X, Copy, AlertTriangle, TrendingUp, Activity } from "lucide-react";
+import { X, Copy, AlertTriangle, TrendingUp, Activity, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 interface Node {
@@ -28,20 +28,69 @@ interface D3NodeDetailsPanelProps {
 const D3NodeDetailsPanel: React.FC<D3NodeDetailsPanelProps> = ({ node, edges, onClose }) => {
   if (!node) return null;
 
-  // Calculate incoming and outgoing transactions
+  // Helper: Safely get node ID from source/target
+  const getNodeId = (nodeOrString: string | Node): string => {
+    return typeof nodeOrString === 'string' ? nodeOrString : nodeOrString.id;
+  };
+
+  // Helper: Safely get edge value (handle undefined/null/NaN)
+  const getEdgeValue = (edge: Edge): number => {
+    const value = edge.value;
+    if (typeof value === 'number' && !isNaN(value) && isFinite(value)) {
+      return value;
+    }
+    return 0;
+  };
+
+  // ✅ NEW: Smart ETH formatter - shows appropriate decimals based on value
+  const formatETH = (value: number): string => {
+    if (value === 0) return '0 ETH';
+    
+    // For very small amounts (< 0.0001), use scientific notation
+    if (value < 0.0001) {
+      return `${value.toExponential(2)} ETH`;
+    }
+    
+    // For small amounts (< 0.01), show 6 decimals
+    if (value < 0.01) {
+      return `${value.toFixed(6)} ETH`;
+    }
+    
+    // For medium amounts (< 1), show 4 decimals
+    if (value < 1) {
+      return `${value.toFixed(4)} ETH`;
+    }
+    
+    // For large amounts (>= 1), show 2 decimals
+    return `${value.toFixed(2)} ETH`;
+  };
+
+  // Calculate incoming transactions
   const incomingTxs = edges.filter(e => {
-    const target = typeof e.target === 'string' ? e.target : e.target.id;
-    return target === node.id;
+    const targetId = getNodeId(e.target);
+    return targetId === node.id;
   });
 
+  // Calculate outgoing transactions
   const outgoingTxs = edges.filter(e => {
-    const source = typeof e.source === 'string' ? e.source : e.source.id;
-    return source === node.id;
+    const sourceId = getNodeId(e.source);
+    return sourceId === node.id;
   });
 
-  const totalIncoming = incomingTxs.reduce((sum, tx) => sum + tx.value, 0);
-  const totalOutgoing = outgoingTxs.reduce((sum, tx) => sum + tx.value, 0);
+  // Calculate totals with safe value extraction
+  const totalIncoming = incomingTxs.reduce((sum, tx) => sum + getEdgeValue(tx), 0);
+  const totalOutgoing = outgoingTxs.reduce((sum, tx) => sum + getEdgeValue(tx), 0);
   const balance = totalIncoming - totalOutgoing;
+
+  // Debug logging (can be removed after confirming fix)
+  console.log('Node Details Debug:', {
+    nodeId: node.id,
+    incomingCount: incomingTxs.length,
+    outgoingCount: outgoingTxs.length,
+    totalIncoming,
+    totalOutgoing,
+    sampleIncomingValue: incomingTxs[0] ? getEdgeValue(incomingTxs[0]) : 'N/A'
+  });
 
   const getRiskBadgeVariant = (risk: number) => {
     if (risk >= 0.8) return "destructive";
@@ -130,15 +179,15 @@ const D3NodeDetailsPanel: React.FC<D3NodeDetailsPanelProps> = ({ node, edges, on
             </p>
           </div>
 
-          {/* Transaction Stats */}
+          {/* Transaction Stats - FIXED with smart formatting */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-primary/10 rounded-lg p-3 border border-primary/20">
               <p className="text-xs text-muted-foreground mb-1">Incoming</p>
               <p className="text-lg font-bold text-success">
                 {incomingTxs.length}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {totalIncoming.toFixed(4)} ETH
+              <p className="text-xs text-muted-foreground mt-1 break-all">
+                {formatETH(totalIncoming)}
               </p>
             </div>
             <div className="bg-accent/10 rounded-lg p-3 border border-accent/20">
@@ -146,18 +195,18 @@ const D3NodeDetailsPanel: React.FC<D3NodeDetailsPanelProps> = ({ node, edges, on
               <p className="text-lg font-bold text-warning">
                 {outgoingTxs.length}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {totalOutgoing.toFixed(4)} ETH
+              <p className="text-xs text-muted-foreground mt-1 break-all">
+                {formatETH(totalOutgoing)}
               </p>
             </div>
           </div>
 
-          {/* Balance */}
+          {/* Balance - FIXED with smart formatting */}
           <div className="bg-secondary/50 rounded-lg p-3 border border-border">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Net Flow</span>
-              <span className={`text-lg font-bold ${balance >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {balance >= 0 ? '+' : ''}{balance.toFixed(4)} ETH
+              <span className={`text-lg font-bold break-all ${balance >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {balance >= 0 ? '+' : ''}{formatETH(Math.abs(balance))}
               </span>
             </div>
           </div>
@@ -173,6 +222,15 @@ const D3NodeDetailsPanel: React.FC<D3NodeDetailsPanelProps> = ({ node, edges, on
               <Copy className="h-3 w-3 mr-2" />
               Copy Address
             </Button>
+            <Button
+              onClick={() => window.open(`https://etherscan.io/address/${node.id}`, '_blank')}
+              variant="default"
+              size="sm"
+              className="flex-1"
+            >
+              <ExternalLink className="h-3 w-3 mr-2" />
+              View on Etherscan
+            </Button>
           </div>
 
           {/* Connected Wallets */}
@@ -180,18 +238,24 @@ const D3NodeDetailsPanel: React.FC<D3NodeDetailsPanelProps> = ({ node, edges, on
             <p className="text-sm font-medium">Connected Wallets</p>
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {incomingTxs.slice(0, 5).map((tx, idx) => {
-                const source = typeof tx.source === 'string' ? tx.source : tx.source.id;
+                const sourceId = getNodeId(tx.source);
+                const sourceLabel = sourceId.slice(0, 10) + '...' + sourceId.slice(-8);
+                const value = getEdgeValue(tx);
                 return (
-                  <div key={idx} className="text-xs font-mono text-muted-foreground bg-secondary/30 px-2 py-1 rounded">
-                    ← {source.slice(0, 10)}...{source.slice(-8)}
+                  <div key={idx} className="text-xs font-mono text-muted-foreground bg-secondary/30 px-2 py-1 rounded flex items-center justify-between gap-2">
+                    <span className="truncate">← {sourceLabel}</span>
+                    <span className="text-success font-semibold whitespace-nowrap">{formatETH(value)}</span>
                   </div>
                 );
               })}
               {outgoingTxs.slice(0, 5).map((tx, idx) => {
-                const target = typeof tx.target === 'string' ? tx.target : tx.target.id;
+                const targetId = getNodeId(tx.target);
+                const targetLabel = targetId.slice(0, 10) + '...' + targetId.slice(-8);
+                const value = getEdgeValue(tx);
                 return (
-                  <div key={idx} className="text-xs font-mono text-muted-foreground bg-secondary/30 px-2 py-1 rounded">
-                    → {target.slice(0, 10)}...{target.slice(-8)}
+                  <div key={idx} className="text-xs font-mono text-muted-foreground bg-secondary/30 px-2 py-1 rounded flex items-center justify-between gap-2">
+                    <span className="truncate">→ {targetLabel}</span>
+                    <span className="text-warning font-semibold whitespace-nowrap">{formatETH(value)}</span>
                   </div>
                 );
               })}
