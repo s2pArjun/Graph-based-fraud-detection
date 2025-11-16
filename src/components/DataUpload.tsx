@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, CheckCircle, AlertCircle, Database, Info, Wifi } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, Database, Info, Wifi, FileDown } from "lucide-react";
 import { fetchLatestTransactions, validateApiKey } from "@/lib/etherscanAPI";
 
 interface DataUploadProps {
@@ -23,6 +23,7 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
   const [apiKey] = useState<string>('JYX1K3WV1RIQ99RDYD6S8WDF21U7Q3UGGA');
   const [isFetchingLive, setIsFetchingLive] = useState(false);
   const [liveDataPreview, setLiveDataPreview] = useState<any[] | null>(null);
+  const [fullLiveData, setFullLiveData] = useState<any[] | null>(null);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -69,7 +70,12 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
         const values = line.split(',').map(v => v.trim());
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] || '';
+          // Convert numeric columns to numbers
+          if (header === 'value' || header === 'gas_price') {
+            row[header] = parseFloat(values[index]) || 0;
+          } else {
+            row[header] = values[index] || '';
+          }
         });
         return row;
       });
@@ -100,7 +106,12 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
         const values = line.split(',').map(v => v.trim());
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] || '';
+          // Convert numeric columns to numbers
+          if (header === 'value' || header === 'gas_price') {
+            row[header] = parseFloat(values[index]) || 0;
+          } else {
+            row[header] = values[index] || '';
+          }
         });
         return row;
       });
@@ -146,7 +157,8 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
         return;
       }
 
-      // Preview first 5 transactions
+      // Store full data for download, preview first 5
+      setFullLiveData(result.data);
       setLiveDataPreview(result.data.slice(0, 5));
       setCsvPreview(null);
       setUploadedFile(null);
@@ -184,6 +196,41 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
       setUploadStatus('error');
       setErrorMessage('Failed to analyze transactions');
     }
+  };
+
+  // Download live fetched data as CSV
+  const downloadLiveDataCSV = () => {
+    if (!fullLiveData || fullLiveData.length === 0) {
+      alert('No data to download');
+      return;
+    }
+
+    // Create CSV header
+    const headers = Object.keys(fullLiveData[0]);
+    
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...fullLiveData.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          // Handle values that might contain commas
+          if (typeof value === 'string' && value.includes(',')) {
+            return `"${value}"`;
+          }
+          return value;
+        }).join(',')
+      )
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `etherscan-live-data-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -398,8 +445,17 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
               {uploadStatus === 'success' && liveDataPreview && (
                 <Alert className="border-success/20 bg-success/10">
                   <CheckCircle className="h-4 w-4 text-success" />
-                  <AlertDescription className="text-success">
-                    Successfully fetched {liveDataPreview.length}+ live transactions from Ethereum network
+                  <AlertDescription className="text-success flex items-center justify-between">
+                    <span>Successfully fetched {fullLiveData?.length || 0} live transactions from Ethereum network</span>
+                    <Button
+                      onClick={downloadLiveDataCSV}
+                      variant="ghost"
+                      size="sm"
+                      className="text-success hover:text-success hover:bg-success/20"
+                    >
+                      <FileDown className="h-3 w-3 mr-1" />
+                      Download
+                    </Button>
                   </AlertDescription>
                 </Alert>
               )}
@@ -415,12 +471,23 @@ const DataUpload: React.FC<DataUploadProps> = ({ onDataUpload }) => {
                     <Wifi className="h-5 w-5 text-accent" />
                     Live Data Preview
                   </span>
-                  <Badge variant="secondary" className="bg-success/20 text-success">
-                    Live from Etherscan
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-success/20 text-success">
+                      {fullLiveData?.length || 0} transactions
+                    </Badge>
+                    <Button
+                      onClick={downloadLiveDataCSV}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Download CSV
+                    </Button>
+                  </div>
                 </CardTitle>
                 <CardDescription>
-                  First 5 transactions from the latest blocks
+                  First 5 transactions from the latest blocks (showing {liveDataPreview?.length || 0} of {fullLiveData?.length || 0})
                 </CardDescription>
               </CardHeader>
               <CardContent>
