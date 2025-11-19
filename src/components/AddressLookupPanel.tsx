@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, ExternalLink, Copy, AlertCircle, TrendingUp } from "lucide-react";
+import { Search, ExternalLink, Copy, AlertCircle, TrendingUp, Shield } from "lucide-react";
 import { fetchCompleteAddressDetails } from "@/lib/addressLookup";
 import { toast } from "sonner";
 
@@ -14,7 +14,7 @@ const AddressLookupPanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [addressData, setAddressData] = useState<any>(null);
   const [error, setError] = useState('');
-  
+
   const API_KEY = 'JYX1K3WV1RIQ99RDYD6S8WDF21U7Q3UGGA';
 
   const handleLookup = async () => {
@@ -55,6 +55,7 @@ const AddressLookupPanel: React.FC = () => {
           Address Lookup
         </CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-4">
         {/* Search Input */}
         <div className="flex gap-2">
@@ -84,15 +85,24 @@ const AddressLookupPanel: React.FC = () => {
         {/* Results */}
         {addressData && (
           <div className="space-y-4 animate-fade-in">
+
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Badge variant={addressData.isContract ? 'secondary' : 'outline'}>
                   {addressData.isContract ? 'Smart Contract' : 'EOA Wallet'}
                 </Badge>
+
+                {addressData.isContract && (
+                  <Badge variant="default" className="bg-accent">
+                    🤖 Automated Contract
+                  </Badge>
+                )}
+
                 <Button variant="ghost" size="sm" onClick={copyAddress}>
                   <Copy className="h-3 w-3" />
                 </Button>
+
                 <Button variant="ghost" size="sm" onClick={openInEtherscan}>
                   <ExternalLink className="h-3 w-3" />
                 </Button>
@@ -105,11 +115,26 @@ const AddressLookupPanel: React.FC = () => {
                 <p className="text-xs text-muted-foreground mb-1">Balance</p>
                 <p className="text-lg font-bold text-primary">{addressData.balance} ETH</p>
               </div>
+
               <div className="bg-accent/10 rounded-lg p-3 border border-accent/20">
                 <p className="text-xs text-muted-foreground mb-1">Transactions</p>
                 <p className="text-lg font-bold text-accent">{addressData.transactionCount}</p>
               </div>
             </div>
+
+            {/* Smart Contract Notice */}
+            {addressData.isContract && (
+              <Alert className="border-accent/20 bg-accent/10">
+                <Shield className="h-4 w-4 text-accent" />
+                <AlertDescription className="text-accent">
+                  <strong>Smart Contract Detected</strong>
+                  <p className="text-xs mt-1">
+                    This address is an automated smart contract, not a regular wallet.
+                    Smart contracts can execute programmed transactions automatically.
+                  </p>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Recent Transactions */}
             <div className="space-y-2">
@@ -117,6 +142,7 @@ const AddressLookupPanel: React.FC = () => {
                 <TrendingUp className="h-4 w-4" />
                 Recent Transactions
               </h4>
+
               <ScrollArea className="h-64 border border-border rounded-lg">
                 <div className="p-2 space-y-2">
                   {addressData.recentTransactions.map((tx: any, idx: number) => (
@@ -137,9 +163,21 @@ const AddressLookupPanel: React.FC = () => {
 
             {/* Account Age */}
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>First TX: {addressData.firstTxTimestamp !== 'N/A' ? new Date(addressData.firstTxTimestamp).toLocaleDateString() : 'N/A'}</p>
-              <p>Last TX: {addressData.lastTxTimestamp !== 'N/A' ? new Date(addressData.lastTxTimestamp).toLocaleDateString() : 'N/A'}</p>
+              <p>
+                First TX:{' '}
+                {addressData.firstTxTimestamp !== 'N/A'
+                  ? new Date(addressData.firstTxTimestamp).toLocaleDateString()
+                  : 'N/A'}
+              </p>
+
+              <p>
+                Last TX:{' '}
+                {addressData.lastTxTimestamp !== 'N/A'
+                  ? new Date(addressData.lastTxTimestamp).toLocaleDateString()
+                  : 'N/A'}
+              </p>
             </div>
+
           </div>
         )}
       </CardContent>
