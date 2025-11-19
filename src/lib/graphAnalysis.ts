@@ -1,6 +1,9 @@
 // @ts-nocheck
 import Graph from 'graphology';
 import pagerank from 'graphology-metrics/centrality/pagerank';
+import { betweennessCentrality } from 'graphology-metrics/centrality/betweenness';
+import { analyzeTemporalPatterns, TemporalAnalysisResults } from './temporalAnalysis';
+import { runCommunityDetection, CommunityDetectionResults } from './communityDetection';
 // import { connectedComponents } from 'graphology-components';
 
 interface Transaction {
@@ -238,6 +241,33 @@ export class FraudDetectionAnalyzer {
         return entropy;
     }
 
+    calculateBetweenness(): Record<string, number> {
+        try {
+            console.log('📊 Calculating betweenness centrality...');
+            return betweennessCentrality(this.graph);
+        } catch (error) {
+            console.error('Betweenness calculation failed:', error);
+            return {};
+        }
+    }
+
+    identifyBridgeNodes(betweennessScores: Record<string, number>): Array<{address: string; score: number; role: string}> {
+        const scores = Object.values(betweennessScores);
+        if (scores.length === 0) return [];
+        
+        const threshold = scores.reduce((a, b) => a + b, 0) / scores.length;
+        
+        return Object.entries(betweennessScores)
+            .filter(([_, score]) => score > threshold * 2)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20)
+            .map(([address, score]) => ({
+                address,
+                score,
+                role: 'Potential Mixer/Intermediary'
+            }));
+    }
+
     calculateMicroScore(
         address: string,
         pagerankScores: Record<string, number>,
@@ -409,9 +439,23 @@ export class FraudDetectionAnalyzer {
             });
         });
 
-        // NEW: Calculate DYNAMIC threshold using standard deviation 
+        // NEW: Temporal Analysis
+        console.log('⏰ Running temporal analysis...');
+        const temporalAnalysis = analyzeTemporalPatterns(this.transactions);
+
+        // NEW: Betweenness Centrality (mixer detection)
+        const betweennessScores = this.calculateBetweenness();
+        const bridgeNodes = this.identifyBridgeNodes(betweennessScores);
+
+        // NEW: Community Detection
+        console.log('👥 Running community detection...');
+        const riskScoresMap = new Map(nodes.map(n => [n.id, n.risk]));
+        const communityAnalysis = runCommunityDetection(this.graph, riskScoresMap);
+
+        // NEW: Calculate DYNAMIC threshold using standard deviation
         const avgRisk = nodes.reduce((sum, n) => sum + n.risk, 0) / nodes.length;
-         // Calculate standard deviation for better threshold
+        
+        // Calculate standard deviation for better threshold
         const variance = nodes.reduce((sum, n) => sum + Math.pow(n.risk - avgRisk, 2), 0) / nodes.length;
         const stdDev = Math.sqrt(variance);
         
@@ -498,7 +542,10 @@ export class FraudDetectionAnalyzer {
             graphData, 
             detailedMetrics,
             gcnGraphSuspiciousOnly,
-            gcnGraphWithNeighbors
+            gcnGraphWithNeighbors,
+            temporalAnalysis,
+            bridgeNodes,
+            communityAnalysis
         };
     }
 }

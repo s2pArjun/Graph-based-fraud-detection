@@ -38,13 +38,19 @@ interface FraudResultsProps {
   detailedMetrics: any[];
   gcnGraphSuspiciousOnly?: any;
   gcnGraphWithNeighbors?: any;
+  temporalAnalysis?: any;
+  bridgeNodes?: any;
+  communityAnalysis?: any;
 }
 
 const FraudResults: React.FC<FraudResultsProps> = ({ 
   results, 
   detailedMetrics,
   gcnGraphSuspiciousOnly,
-  gcnGraphWithNeighbors
+  gcnGraphWithNeighbors,
+  temporalAnalysis,
+  bridgeNodes,
+  communityAnalysis
 }) => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
@@ -274,7 +280,7 @@ const FraudResults: React.FC<FraudResultsProps> = ({
       )}
 
       <Tabs defaultValue="high-risk" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-secondary/50 h-auto">
+        <TabsList className="grid w-full grid-cols-6 bg-secondary/50 h-auto">
           <TabsTrigger value="high-risk" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
             <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">High Risk Wallets</span>
@@ -294,6 +300,16 @@ const FraudResults: React.FC<FraudResultsProps> = ({
             <TrendingUp className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">Influence Ranking</span>
             <span className="sm:hidden">Ranking</span>
+          </TabsTrigger>
+          <TabsTrigger value="communities" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
+            <Users className="h-3 w-3 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">Communities</span>
+            <span className="sm:hidden">Groups</span>
+          </TabsTrigger>
+          <TabsTrigger value="temporal" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
+            <Activity className="h-3 w-3 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">Temporal</span>
+            <span className="sm:hidden">Time</span>
           </TabsTrigger>
         </TabsList>
 
@@ -509,6 +525,136 @@ const FraudResults: React.FC<FraudResultsProps> = ({
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Communities Tab */}
+        <TabsContent value="communities" className="space-y-4">
+          {communityAnalysis && (
+            <Card className="bg-gradient-card border-border shadow-card">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-warning" />
+                    Fraud Ring Detection
+                  </span>
+                  <Badge variant="warning">
+                    {communityAnalysis.suspiciousCommunities?.length || 0} suspicious groups
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Isolated communities with high internal transaction ratios
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-96">
+                  <div className="space-y-4">
+                    {communityAnalysis.suspiciousCommunities?.map((community: any, idx: number) => (
+                      <div key={idx} className="border border-destructive/30 rounded-lg p-4 bg-destructive/5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium">Community {community.communityId}</h4>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="destructive">{community.size} wallets</Badge>
+                            <Badge variant="outline">
+                              {(community.internalTxRatio * 100).toFixed(1)}% internal
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                          <div>
+                            <span className="text-muted-foreground">Avg Risk:</span>
+                            <span className="ml-2 font-semibold">{(community.avgRisk * 100).toFixed(1)}%</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Total Volume:</span>
+                            <span className="ml-2 font-semibold">{community.totalVolume.toFixed(4)} ETH</span>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {community.members.slice(0, 5).map((addr: string) => (
+                            <code key={addr} className="block bg-muted px-2 py-1 rounded my-1">
+                              {formatAddress(addr)}
+                            </code>
+                          ))}
+                          {community.members.length > 5 && (
+                            <p className="mt-2">+ {community.members.length - 5} more wallets</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Temporal Tab */}
+        <TabsContent value="temporal" className="space-y-4">
+          {temporalAnalysis && (
+            <>
+              {/* Burst Activity */}
+              {temporalAnalysis.burstActivity?.length > 0 && (
+                <Card className="bg-gradient-card border-border shadow-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-destructive" />
+                      Burst Activity Detected
+                    </CardTitle>
+                    <CardDescription>Sudden spikes in transaction volume (Pump & Dump indicator)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {temporalAnalysis.burstActivity.map((burst: any, idx: number) => (
+                        <div key={idx} className="border border-border rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">
+                              {new Date(burst.timestamp * 1000).toLocaleString()}
+                            </span>
+                            <Badge variant={burst.suspicionLevel === 'critical' ? 'destructive' : 'warning'}>
+                              {burst.multiplier.toFixed(1)}x spike
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {burst.transactionCount} transactions ({burst.addresses.length} unique addresses)
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Dormant Wakeups */}
+              {temporalAnalysis.dormantWakeups?.length > 0 && (
+                <Card className="bg-gradient-card border-border shadow-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-warning" />
+                      Dormant Wallet Activation
+                    </CardTitle>
+                    <CardDescription>Wallets inactive for 30+ days suddenly active (hacked account indicator)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-64">
+                      <div className="space-y-2">
+                        {temporalAnalysis.dormantWakeups.map((wakeup: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-2 border border-border rounded">
+                            <code className="text-xs font-mono">{formatAddress(wakeup.address)}</code>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary">{wakeup.dormantDays} days</Badge>
+                              <Badge variant={wakeup.suspicionLevel === 'high' ? 'destructive' : 'warning'}>
+                                {wakeup.suspicionLevel}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>
