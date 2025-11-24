@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import GCNTrainingComponent from './GCNTrainingComponent';
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -16,7 +17,8 @@ import {
   Shield,
   Users,
   Activity,
-  FileJson
+  FileJson,
+  Brain
 } from "lucide-react";
 
 interface FraudDetectionResults {
@@ -280,7 +282,7 @@ const FraudResults: React.FC<FraudResultsProps> = ({
       )}
 
       <Tabs defaultValue="high-risk" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full grid-cols-5 bg-secondary/50 h-auto">
+        <TabsList className="grid w-full grid-cols-6 bg-secondary/50 h-auto">
           <TabsTrigger value="high-risk" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
             <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">High Risk Wallets</span>
@@ -305,6 +307,11 @@ const FraudResults: React.FC<FraudResultsProps> = ({
             <Activity className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">Temporal</span>
             <span className="sm:hidden">Time</span>
+          </TabsTrigger>
+          <TabsTrigger value="gcn" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
+            <Brain className="h-3 w-3 md:h-4 md:w-4" />
+             <span className="hidden sm:inline">GCN Training</span>
+             <span className="sm:hidden">GCN</span>
           </TabsTrigger>
         </TabsList>
 
@@ -652,6 +659,14 @@ const FraudResults: React.FC<FraudResultsProps> = ({
     </>
   )}
 </TabsContent>
+
+<TabsContent value="gcn" className="space-y-4">
+  <GCNTrainingComponent 
+    gcnGraphData={gcnGraphWithNeighbors} 
+  />
+</TabsContent>
+
+
       </Tabs>
     </div>
   );

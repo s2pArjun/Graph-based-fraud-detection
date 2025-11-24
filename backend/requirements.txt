@@ -1,0 +1,13 @@
+Flask==3.0.0
+flask-cors==4.0.0
+nbformat==5.9.2
+nbconvert==7.11.0
+jupyter==1.0.0
+ipykernel==6.26.0
+torch
+torch-geometric
+networkx
+numpy
+pandas
+matplotlib
+scikit-learn
