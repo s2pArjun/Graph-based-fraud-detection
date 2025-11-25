@@ -6,12 +6,14 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Database, Network, AlertTriangle, TrendingUp, Activity, Shield, FileDown, Search } from "lucide-react";
+import { Upload, Database, Network, AlertTriangle, TrendingUp, Activity, Shield, FileDown, Search, History } from "lucide-react";
 import DataUpload from "./DataUpload";
 import GraphVisualization from "./GraphVisualization";
 import FraudResults from "./FraudResults";
 import AddressLookupPanel from "./AddressLookupPanel";
 import { analyzeFraudData } from "@/lib/graphAnalysis";
+import AnalysisHistory from "./AnalysisHistory";
+
 
 interface ProcessingStatus {
   stage: string;
@@ -56,6 +58,7 @@ const FraudDetectionDashboard: React.FC = () => {
   const [temporalAnalysis, setTemporalAnalysis] = useState<any>(null);
   const [bridgeNodes, setBridgeNodes] = useState<any>(null);
   const [communityAnalysis, setCommunityAnalysis] = useState<any>(null);
+  const [lastAnalysisData, setLastAnalysisData] = useState<any>(null)
 
   const handleDataUpload = useCallback((data: any[]) => {
     setCsvData(data);
@@ -105,6 +108,13 @@ const FraudDetectionDashboard: React.FC = () => {
           setTemporalAnalysis(temporal);
           setBridgeNodes(bridges);
           setCommunityAnalysis(communities);
+          // 🔥 NEW: Save to history
+          await saveAnalysisToHistory(
+           realResults, 
+            data, 
+            data.length > 0 && data[0].transaction_hash ? 'Live Etherscan' : 'CSV Upload'
+      );
+
         } catch (error) {
           console.error("Error during fraud analysis:", error);
         }
@@ -134,6 +144,43 @@ const FraudDetectionDashboard: React.FC = () => {
     if (risk >= 0.4) return "Low Risk";
     return "Clean";
   };
+
+  // Add this function to save analysis after completion
+const saveAnalysisToHistory = async (fraudResults: any, csvData: any[], dataSource: string) => {
+  try {
+    const response = await fetch('http://localhost:5000/api/save-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stats: fraudResults.stats,
+        transactions: csvData.map((tx, idx) => ({
+          from_address: tx.from_address,
+          to_address: tx.to_address,
+          value: tx.value,
+          timestamp: tx.timestamp,
+          transaction_hash: tx.transaction_hash || `tx_${idx}`,
+          block_number: tx.block_number || 0,
+          risk_score: detailedMetrics.find(m => 
+            m.wallet_address === tx.from_address || 
+            m.wallet_address === tx.to_address
+          )?.micro_score || 0,
+          is_suspicious: detailedMetrics.find(m => 
+            m.wallet_address === tx.from_address || 
+            m.wallet_address === tx.to_address
+          )?.micro_score >= fraudResults.stats.riskThreshold
+        })),
+        dataSource: dataSource
+      })
+    });
+    const result = await response.json();
+    if (result.success) {
+      console.log('✅ Analysis saved to history:', result.sessionId);
+    }
+  } catch (error) {
+    console.error('Failed to save analysis:', error);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-6">
@@ -232,7 +279,7 @@ const FraudDetectionDashboard: React.FC = () => {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-          <TabsList className="grid w-full grid-cols-5 bg-secondary/50 h-auto">
+          <TabsList className="grid w-full grid-cols-6 bg-secondary/50 h-auto">
             <TabsTrigger value="upload" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
               <Upload className="h-3 w-3 md:h-4 md:w-4" />
               <span className="hidden sm:inline">Data Upload</span>
@@ -258,12 +305,20 @@ const FraudDetectionDashboard: React.FC = () => {
               <span className="hidden sm:inline">Address Lookup</span>
               <span className="sm:hidden">Lookup</span>
             </TabsTrigger>
+            <TabsTrigger value="history" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
+              <History className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">History</span>
+              <span className="sm:hidden">Past</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-6">
             <DataUpload onDataUpload={handleDataUpload} />
           </TabsContent>
 
+            <TabsContent value="history" className="space-y-6">
+              <AnalysisHistory />
+            </TabsContent>
           <TabsContent value="processing" className="space-y-6">
             <Card className="bg-gradient-card border-border shadow-card">
               <CardHeader>

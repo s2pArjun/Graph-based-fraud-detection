@@ -8,6 +8,8 @@ import shutil
 from datetime import datetime
 import io
 import zipfile
+import sqlite3
+import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +17,7 @@ CORS(app)
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
 NOTEBOOK_PATH = 'gcn_training.ipynb'
+DATABASE = 'fraud_history.db'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -99,5 +102,186 @@ def download_zip(session_id):
     memory_file.seek(0)
     return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='results.zip')
 
+@app.route('/api/save-analysis', methods=['POST'])
+def save_analysis():
+    """Save analysis results to database"""
+    try:
+        data = request.get_json()
+        
+        session_id = str(uuid.uuid4())
+        created_at = datetime.now().isoformat()
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        
+        # Save session summary
+        c.execute('''INSERT INTO analysis_sessions 
+                     (session_id, created_at, total_nodes, total_edges, 
+                      suspicious_nodes, avg_risk_score, risk_threshold, data_source)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (session_id, created_at, 
+                   data['stats']['totalNodes'],
+                   data['stats']['totalEdges'],
+                   data['stats']['suspiciousNodes'],
+                   data['stats']['riskScore'],
+                   data['stats']['riskThreshold'],
+                   data.get('dataSource', 'CSV Upload')))
+        
+        # Save transactions
+        for tx in data['transactions']:
+            c.execute('''INSERT OR IGNORE INTO transactions 
+                         (session_id, from_address, to_address, value, timestamp, 
+                          tx_hash, block_number, risk_score, is_suspicious)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (session_id,
+                       tx['from_address'],
+                       tx['to_address'],
+                       tx.get('value', 0),
+                       tx.get('timestamp', ''),
+                       tx.get('transaction_hash', ''),
+                       tx.get('block_number', 0),
+                       tx.get('risk_score', 0),
+                       tx.get('is_suspicious', False)))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "sessionId": session_id,
+            "message": "Analysis saved successfully"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/get-history', methods=['GET'])
+def get_history():
+    """Get all analysis sessions"""
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        offset = (page - 1) * limit
+        
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        # Get total count
+        c.execute('SELECT COUNT(*) as count FROM analysis_sessions')
+        total = c.fetchone()['count']
+        
+        # Get paginated results
+        c.execute('''SELECT * FROM analysis_sessions 
+                     ORDER BY created_at DESC 
+                     LIMIT ? OFFSET ?''', (limit, offset))
+        
+        sessions = [dict(row) for row in c.fetchall()]
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "data": sessions,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "totalPages": (total + limit - 1) // limit
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/get-session/<session_id>', methods=['GET'])
+def get_session_details(session_id):
+    """Get detailed data for a specific session"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        # Get session info
+        c.execute('SELECT * FROM analysis_sessions WHERE session_id = ?', (session_id,))
+        session = dict(c.fetchone())
+        
+        # Get transactions for this session
+        c.execute('SELECT * FROM transactions WHERE session_id = ?', (session_id,))
+        transactions = [dict(row) for row in c.fetchall()]
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "session": session,
+            "transactions": transactions
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/search-address/<address>', methods=['GET'])
+def search_address(address):
+    """Search for an address across all analyses"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        # Find all sessions where this address appears
+        c.execute('''SELECT DISTINCT t.session_id, a.*, t.risk_score, t.is_suspicious
+                     FROM transactions t
+                     JOIN analysis_sessions a ON t.session_id = a.session_id
+                     WHERE t.from_address = ? OR t.to_address = ?
+                     ORDER BY a.created_at DESC''', (address.lower(), address.lower()))
+        
+        results = [dict(row) for row in c.fetchall()]
+        
+        # Get total times flagged
+        c.execute('''SELECT COUNT(*) as count FROM transactions 
+                     WHERE (from_address = ? OR to_address = ?) 
+                     AND is_suspicious = 1''', (address.lower(), address.lower()))
+        
+        flagged_count = c.fetchone()['count']
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "address": address,
+            "appearances": len(results),
+            "flaggedCount": flagged_count,
+            "sessions": results
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/delete-session/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """Delete a session and its transactions"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        
+        c.execute('DELETE FROM transactions WHERE session_id = ?', (session_id,))
+        c.execute('DELETE FROM analysis_sessions WHERE session_id = ?', (session_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Session deleted"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
 if __name__ == '__main__':
+    from database import init_db
+    init_db()
     app.run(debug=True, port=5000)
