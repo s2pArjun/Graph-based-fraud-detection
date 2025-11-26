@@ -6,13 +6,14 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Database, Network, AlertTriangle, TrendingUp, Activity, Shield, FileDown, Search, History } from "lucide-react";
+import { Upload, Database, Network, AlertTriangle, TrendingUp, Activity, Shield, FileDown, Search, History,Eye } from "lucide-react";
 import DataUpload from "./DataUpload";
 import GraphVisualization from "./GraphVisualization";
 import FraudResults from "./FraudResults";
 import AddressLookupPanel from "./AddressLookupPanel";
 import { analyzeFraudData } from "@/lib/graphAnalysis";
 import AnalysisHistory from "./AnalysisHistory";
+import WatchlistPanel from "./WatchlistPanel";
 
 
 interface ProcessingStatus {
@@ -310,7 +311,16 @@ const saveAnalysisToHistory = async (fraudResults: any, csvData: any[], dataSour
               <span className="hidden sm:inline">History</span>
               <span className="sm:hidden">Past</span>
             </TabsTrigger>
+            <TabsTrigger value="watchlist" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-2.5 text-xs md:text-sm">
+              <Eye className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Watchlist</span>
+              <span className="sm:hidden">Watch</span>
+            </TabsTrigger>
           </TabsList>
+
+            <TabsContent value="watchlist" className="space-y-6">
+            <WatchlistPanel />
+            </TabsContent>
 
           <TabsContent value="upload" className="space-y-6">
             <DataUpload onDataUpload={handleDataUpload} />

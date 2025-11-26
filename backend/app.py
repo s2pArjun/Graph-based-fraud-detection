@@ -10,6 +10,9 @@ import io
 import zipfile
 import sqlite3
 import uuid
+from datetime import datetime, timedelta
+import threading
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -280,6 +283,128 @@ def delete_session(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/watchlist/add', methods=['POST'])
+def add_to_watchlist():
+    """Add an address to watchlist"""
+    try:
+        data = request.get_json()
+        address = data.get('address', '').lower()
+        user_email = data.get('email')
+        alert_type = data.get('alertType', 'all')  # 'all', 'incoming', 'outgoing'
+        
+        if not address or len(address) != 42:
+            return jsonify({"success": False, "error": "Invalid address"}), 400
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        
+        try:
+            c.execute('''INSERT INTO watchlist 
+                         (address, user_email, alert_type, created_at, last_checked)
+                         VALUES (?, ?, ?, ?, ?)''',
+                      (address, user_email, alert_type, 
+                       datetime.now().isoformat(), 
+                       datetime.now().isoformat()))
+            conn.commit()
+            
+            watchlist_id = c.lastrowid
+            
+            return jsonify({
+                "success": True,
+                "message": "Address added to watchlist",
+                "watchlistId": watchlist_id
+            })
+        except sqlite3.IntegrityError:
+            return jsonify({
+                "success": False, 
+                "error": "Address already in your watchlist"
+            }), 409
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/watchlist', methods=['GET'])
+def get_watchlist():
+    """Get user's watchlist"""
+    try:
+        user_email = request.args.get('email')
+        
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        query = 'SELECT * FROM watchlist WHERE is_active = 1'
+        params = []
+        
+        if user_email:
+            query += ' AND user_email = ?'
+            params.append(user_email)
+        
+        query += ' ORDER BY created_at DESC'
+        
+        c.execute(query, params)
+        watchlist = [dict(row) for row in c.fetchall()]
+        
+        # Get alert count for each address
+        for item in watchlist:
+            c.execute('SELECT COUNT(*) as count FROM alerts WHERE watchlist_id = ?', 
+                     (item['id'],))
+            item['alert_count'] = c.fetchone()['count']
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "watchlist": watchlist
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/watchlist/<int:watchlist_id>', methods=['DELETE'])
+def remove_from_watchlist(watchlist_id):
+    """Remove address from watchlist"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        
+        c.execute('UPDATE watchlist SET is_active = 0 WHERE id = ?', (watchlist_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Removed from watchlist"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/watchlist/<int:watchlist_id>/alerts', methods=['GET'])
+def get_address_alerts(watchlist_id):
+    """Get alerts for a specific watchlist address"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        c.execute('''SELECT * FROM alerts 
+                     WHERE watchlist_id = ? 
+                     ORDER BY created_at DESC 
+                     LIMIT 50''', (watchlist_id,))
+        
+        alerts = [dict(row) for row in c.fetchall()]
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "alerts": alerts
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     from database import init_db
