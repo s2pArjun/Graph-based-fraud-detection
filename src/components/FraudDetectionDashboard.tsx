@@ -88,38 +88,42 @@ const FraudDetectionDashboard: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, stage.duration));
       
       // For the analysis stage, actually run the real analysis
-      if (stage.stage === "analysis") {
-        try {
-          // Run the real fraud detection analysis
-          const { 
-            fraudResults: realResults, 
-            graphData: realGraphData, 
-            detailedMetrics: metrics,
-            gcnGraphSuspiciousOnly: gcnSuspicious,
-            gcnGraphWithNeighbors: gcnNeighbors,
-            temporalAnalysis: temporal,
-            bridgeNodes: bridges,
-            communityAnalysis: communities
-          } = analyzeFraudData(data);
-          setGraphData(realGraphData);
-          setFraudResults(realResults);
-          setDetailedMetrics(metrics);
-          setGcnGraphSuspiciousOnly(gcnSuspicious);
-          setGcnGraphWithNeighbors(gcnNeighbors);
-          setTemporalAnalysis(temporal);
-          setBridgeNodes(bridges);
-          setCommunityAnalysis(communities);
-          // 🔥 NEW: Save to history
-          await saveAnalysisToHistory(
-           realResults, 
-            data, 
-            data.length > 0 && data[0].transaction_hash ? 'Live Etherscan' : 'CSV Upload'
-      );
+// Inside the "analysis" stage, AFTER setting all the states:
 
-        } catch (error) {
-          console.error("Error during fraud analysis:", error);
-        }
-      }
+if (stage.stage === "analysis") {
+  try {
+    const { 
+      fraudResults: realResults, 
+      graphData: realGraphData, 
+      detailedMetrics: metrics, // ✅ WE HAVE THIS
+      gcnGraphSuspiciousOnly: gcnSuspicious,
+      gcnGraphWithNeighbors: gcnNeighbors,
+      temporalAnalysis: temporal,
+      bridgeNodes: bridges,
+      communityAnalysis: communities
+    } = analyzeFraudData(data);
+    
+    setGraphData(realGraphData);
+    setFraudResults(realResults);
+    setDetailedMetrics(metrics);
+    setGcnGraphSuspiciousOnly(gcnSuspicious);
+    setGcnGraphWithNeighbors(gcnNeighbors);
+    setTemporalAnalysis(temporal);
+    setBridgeNodes(bridges);
+    setCommunityAnalysis(communities);
+    
+    // ✅ FIXED: Pass metrics directly to avoid state timing issues
+    await saveAnalysisToHistory(
+      realResults, 
+      data, 
+      data.length > 0 && data[0].transaction_hash ? 'Live Etherscan' : 'CSV Upload',
+      metrics // ✅ PASS METRICS HERE DIRECTLY!
+    );
+
+  } catch (error) {
+    console.error("Error during fraud analysis:", error);
+  }
+}
       
       setProcessingStatus({
         stage: stage.stage,
@@ -147,32 +151,57 @@ const FraudDetectionDashboard: React.FC = () => {
   };
 
   // Add this function to save analysis after completion
-const saveAnalysisToHistory = async (fraudResults: any, csvData: any[], dataSource: string) => {
+// Around line 60-90, REPLACE the entire saveAnalysisToHistory function with this:
+
+const saveAnalysisToHistory = async (
+  fraudResults: any, 
+  csvData: any[], 
+  dataSource: string,
+  metrics: any[] // ✅ ADD THIS PARAMETER - pass metrics directly!
+) => {
   try {
+    // ✅ Create a map for faster lookups
+    const riskScoreMap = new Map(
+      metrics.map(metric => [metric.wallet_address.toLowerCase(), metric])
+    );
+
+    // ✅ Enrich transactions with ACTUAL risk scores from metrics
+    const enrichedTransactions = csvData.map((tx, idx) => {
+      const fromMetric = riskScoreMap.get(tx.from_address.toLowerCase());
+      const toMetric = riskScoreMap.get(tx.to_address.toLowerCase());
+      
+      // Use the higher risk score between sender and receiver
+      const maxRiskScore = Math.max(
+        fromMetric?.micro_score || 0,
+        toMetric?.micro_score || 0
+      );
+      
+      const isSuspicious = maxRiskScore >= fraudResults.stats.riskThreshold;
+
+      return {
+        from_address: tx.from_address.toLowerCase(),
+        to_address: tx.to_address.toLowerCase(),
+        value: tx.value || 0,
+        timestamp: tx.timestamp || new Date().toISOString(),
+        transaction_hash: tx.transaction_hash || `tx_${idx}`,
+        block_number: tx.block_number || 0,
+        risk_score: maxRiskScore, // ✅ NOW HAS ACTUAL RISK SCORE
+        is_suspicious: isSuspicious // ✅ NOW CORRECTLY FLAGGED
+      };
+    });
+
+    console.log(`💾 Saving ${enrichedTransactions.length} transactions, ${enrichedTransactions.filter(t => t.is_suspicious).length} suspicious`);
+
     const response = await fetch('http://localhost:5000/api/save-analysis', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         stats: fraudResults.stats,
-        transactions: csvData.map((tx, idx) => ({
-          from_address: tx.from_address,
-          to_address: tx.to_address,
-          value: tx.value,
-          timestamp: tx.timestamp,
-          transaction_hash: tx.transaction_hash || `tx_${idx}`,
-          block_number: tx.block_number || 0,
-          risk_score: detailedMetrics.find(m => 
-            m.wallet_address === tx.from_address || 
-            m.wallet_address === tx.to_address
-          )?.micro_score || 0,
-          is_suspicious: detailedMetrics.find(m => 
-            m.wallet_address === tx.from_address || 
-            m.wallet_address === tx.to_address
-          )?.micro_score >= fraudResults.stats.riskThreshold
-        })),
+        transactions: enrichedTransactions, // ✅ USE ENRICHED DATA
         dataSource: dataSource
       })
     });
+    
     const result = await response.json();
     if (result.success) {
       console.log('✅ Analysis saved to history:', result.sessionId);
@@ -181,7 +210,6 @@ const saveAnalysisToHistory = async (fraudResults: any, csvData: any[], dataSour
     console.error('Failed to save analysis:', error);
   }
 };
-
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-6">
