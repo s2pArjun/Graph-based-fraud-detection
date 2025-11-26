@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
+from database import init_db, get_db_connection
 import os
 import json
 import shutil
@@ -114,7 +115,7 @@ def save_analysis():
         session_id = str(uuid.uuid4())
         created_at = datetime.now().isoformat()
         
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         c = conn.cursor()
         
         # Save session summary
@@ -167,7 +168,7 @@ def get_history():
         limit = int(request.args.get('limit', 10))
         offset = (page - 1) * limit
         
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         
@@ -202,7 +203,7 @@ def get_history():
 def get_session_details(session_id):
     """Get detailed data for a specific session"""
     try:
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         
@@ -230,7 +231,7 @@ def get_session_details(session_id):
 def search_address(address):
     """Search for an address across all analyses"""
     try:
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         
@@ -268,7 +269,7 @@ def search_address(address):
 def delete_session(session_id):
     """Delete a session and its transactions"""
     try:
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         c = conn.cursor()
         
         c.execute('DELETE FROM transactions WHERE session_id = ?', (session_id,))
@@ -295,7 +296,7 @@ def add_to_watchlist():
         if not address or len(address) != 42:
             return jsonify({"success": False, "error": "Invalid address"}), 400
         
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         c = conn.cursor()
         
         try:
@@ -332,7 +333,7 @@ def get_watchlist():
     try:
         user_email = request.args.get('email')
         
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         
@@ -369,7 +370,7 @@ def get_watchlist():
 def remove_from_watchlist(watchlist_id):
     """Remove address from watchlist"""
     try:
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         c = conn.cursor()
         
         c.execute('UPDATE watchlist SET is_active = 0 WHERE id = ?', (watchlist_id,))
@@ -386,7 +387,7 @@ def remove_from_watchlist(watchlist_id):
 def get_address_alerts(watchlist_id):
     """Get alerts for a specific watchlist address"""
     try:
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         
